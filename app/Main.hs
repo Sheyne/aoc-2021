@@ -223,11 +223,39 @@ drawGrid = unlines . map (unwords . map show)
 parseDay6 :: String -> [Int]
 parseDay6 = map read . splitOn ','
 
-solvePuzzle = show . solveDay5Part2 . parseDay5
+applyNTimes :: Int -> (a->a) -> a -> a
+applyNTimes 0 _ = id
+applyNTimes n f = applyNTimes (n-1) f . f
+
+solveDay6Parts :: Int -> [Int] -> Int
+solveDay6Parts numDays = sum . run numDays . setup
+    where setup :: [Int] -> [Int]
+          setup = foldl' (flip (addNFish 1)) []
+
+          addNFish :: Int -> Int -> [Int] -> [Int]
+          addNFish n 0 [] = [n]
+          addNFish n 0 (numToday:rest) = numToday + n : rest
+          addNFish n days [] = 0 : addNFish n (days - 1) []
+          addNFish n days (numToday:rest) = numToday : addNFish n (days - 1) rest
+
+          run :: Int -> [Int] -> [Int]
+          run = flip applyNTimes step
+
+          step :: [Int] -> [Int]
+          step [] = []
+          step (zeros:rest) = addNFish zeros 6 $ addNFish zeros 8 rest
+
+solveDay6Part1 :: [Int] -> Int
+solveDay6Part1 = solveDay6Parts 80
+
+solveDay6Part2 :: [Int] -> Int
+solveDay6Part2 = solveDay6Parts 256
+
+solvePuzzle = show . solveDay6Part2 . parseDay6
 
 main :: IO ()
 main = do
-        handle <- openFile "data/day5.txt" ReadMode
+        handle <- openFile "data/day6.txt" ReadMode
         contents <- hGetContents handle
         putStrLn $ solvePuzzle contents
         hClose handle
