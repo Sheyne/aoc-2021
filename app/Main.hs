@@ -1,6 +1,6 @@
 module Main where
 
-import System.IO  
+import System.IO
 import Control.Monad
 import Data.List
 import Data.Bits
@@ -9,16 +9,18 @@ import Data.Maybe
 import Data.Char
 
 pairwise :: [a] -> [(a, a)]
+pairwise [] = []
 pairwise (x:rest) = zip (x:rest) rest
 
 triplewise :: [a] -> [(a, a, a)]
-triplewise (x:rest) = map (\(a, (b, c)) -> (a, b, c)) $ zip (x:rest) $ pairwise rest
+triplewise [] = []
+triplewise (x:rest) = zipWith (curry (\(a, (b, c)) -> (a, b, c))) (x:rest) (pairwise rest)
 
 parseDay1 :: String -> [ Int ]
 parseDay1 x = map read (lines x)
 
 solveDay1Part1 :: [ Int ] -> Int
-solveDay1Part1 x = length (filter (\(a, b) -> a < b) $ pairwise x)
+solveDay1Part1 x = length (filter (uncurry (<)) $ pairwise x)
 
 solveDay1Part2 :: [ Int ] -> Int
 solveDay1Part2 x = solveDay1Part1 $ map (\(a, b, c) -> a + b + c) $ triplewise x
@@ -26,10 +28,11 @@ solveDay1Part2 x = solveDay1Part1 $ map (\(a, b, c) -> a + b + c) $ triplewise x
 data Movement = Up Int | Down Int | Forward Int deriving Show
 
 parseMovement :: String -> Movement
-parseMovement x = case words x of 
+parseMovement x = case words x of
                     ["up", amt] -> Up $ read amt
                     ["down", amt] -> Down $ read amt
                     ["forward", amt] -> Forward $ read amt
+                    _ -> error "invalid movement"
 
 parseDay2 :: String -> [ Movement ]
 parseDay2 = map parseMovement . lines
@@ -62,53 +65,57 @@ parseDay3 = map toBits . lines
           toBit :: Char -> Int
           toBit '0' = 0
           toBit '1' = 1
+          toBit _ = error "invalid bit"
 
 
 bitsToInt :: [Int] -> Int
 bitsToInt = rBitsToInt . reverse
-    where     
+    where
         rBitsToInt :: [Int] -> Int
         rBitsToInt (x : rest) = x + 2 * rBitsToInt rest
         rBitsToInt [] = 0
 
 solveDay3Part1 :: [[Int]] -> Int
-solveDay3Part1 nums = 
+solveDay3Part1 nums =
     let mostlyOnes = let
                          sums = map sum $ transpose nums
                          count = length nums
                      in map (\sum -> sum > count - sum) sums
-    in (bitsToInt (map (\b -> if b then 1 else 0) mostlyOnes)) * (bitsToInt (map (\b -> if b then 0 else 1) mostlyOnes))
+    in bitsToInt (map (\b -> if b then 1 else 0) mostlyOnes) * bitsToInt (map (\b -> if b then 0 else 1) mostlyOnes)
 
 solveDay3Part2 :: [[Int]] -> Int
-solveDay3Part2 nums = let 
+solveDay3Part2 nums = let
                           zips = map toZipList nums
                           o2 = inner 1 zips
                           co2 = inner 0 zips
-                      in (bitsToInt o2) * (bitsToInt co2)
+                      in bitsToInt o2 * bitsToInt co2
     where toZipList :: [Int] -> ([Int], Int, [Int])
           toZipList (x:rest) = ([], x, rest)
+          toZipList [] = error "zip list must be non-empty"
           fromZipList :: ([Int], Int, [Int]) -> [Int]
           fromZipList ([], current, right) = current : right
           fromZipList (newCurrent:left, current, right) = fromZipList (left, newCurrent, current: right)
           advance :: ([Int], Int, [Int]) -> ([Int], Int, [Int])
           advance (left, current, newCurrent:right) = (current:left, newCurrent, right)
+          advance _ = error "advance must have right available"
           currents :: [([Int], Int, [Int])] -> [Int]
           currents = map (\(_, c, _) -> c)
           select :: Int -> [([Int], Int, [Int])] -> [([Int], Int, [Int])]
           select a zips = let
-                              numMatching1 = length $ filter (\c -> c == 1) (currents zips)
-                              numMatching0 = (length zips) - numMatching1
+                              numMatching1 = length $ filter (== 1) (currents zips)
+                              numMatching0 = length zips - numMatching1
                               goodBit = case (a, compare numMatching0 numMatching1) of (_, EQ) -> a
                                                                                        (0, LT) -> 0
                                                                                        (0, GT) -> 1
                                                                                        (1, GT) -> 0
                                                                                        (1, LT) -> 1
-                                        
+                                                                                       _ -> error "a must be zero or 1"
+
                           in filter (\(_, c, _) -> c == goodBit) zips
 
           inner :: Int -> [([Int], Int, [Int])] -> [Int]
-          inner a x = case (select a x) of selected:[] -> fromZipList selected
-                                           selected -> inner a (map advance selected)
+          inner a x = case select a x of [selected] -> fromZipList selected
+                                         selected -> inner a (map advance selected)
 
 data Board = Board { draws :: [Int], boards :: [[[Int]]] } deriving Show
 
@@ -118,7 +125,7 @@ splitOn a = splitOnF (a ==)
 splitOnF :: (a -> Bool) -> [a] -> [[a]]
 splitOnF _ [] = []
 splitOnF f s = case break f s of (x, []) -> [x]
-                                 (x, _:rest) -> x : (splitOnF f rest)
+                                 (x, _:rest) -> x : splitOnF f rest
 
 parseDay4 :: String -> Board
 parseDay4 x = let
@@ -137,15 +144,15 @@ markBoard selected = map $ map $ flip elem selected
 checkBoard :: [[Bool]] -> Bool
 checkBoard x = checkRows x || checkRows (transpose x)
 checkRows :: [[Bool]] -> Bool
-checkRows = any $ all id
+checkRows = any and
 scoreBoard :: [Int] -> [[Int]] -> Int
-scoreBoard called board = (last called) * sum (filter (not . flip elem called) $ concat board)
+scoreBoard called board = last called * sum (filter (not . flip elem called) $ concat board)
 
 solveDay4Part1 :: Board -> Int
-solveDay4Part1 b = head $ mapMaybe (solveForPrefix (boards b)) ((prefixes 0 (draws b)))
-    where solveForPrefix :: [[[Int]]] -> [Int] -> (Maybe Int)
+solveDay4Part1 b = head $ mapMaybe (solveForPrefix (boards b)) (prefixes 0 (draws b))
+    where solveForPrefix :: [[[Int]]] -> [Int] -> Maybe Int
           solveForPrefix boards called = let
-                                             boardCompletions = map checkBoard $ map (markBoard called) boards
+                                             boardCompletions = map (checkBoard . markBoard called) boards
                                              finishedBoards = map fst (filter snd (zip boards boardCompletions))
                                          in case finishedBoards of [] -> Nothing
                                                                    board: _ -> Just $ scoreBoard called board
@@ -155,12 +162,13 @@ solveDay4Part2 :: Board -> Int
 solveDay4Part2 b = step (boards b) (replicate (length (boards b)) False) (prefixes 0 (draws b))
     where step :: [[[Int]]] -> [Bool] -> [[Int]] -> Int
           step boards previous (called:nextToCall) = let
-                                                         boardCompletions = map checkBoard $ map (markBoard called) boards
-                                                     in if all id boardCompletions then 
+                                                         boardCompletions = map (checkBoard . markBoard called) boards
+                                                     in if and boardCompletions then
                                                             let
                                                                 lastBoard = head (map snd (filter (not . fst) (zip previous boards)))
                                                             in scoreBoard called lastBoard
                                                         else step boards boardCompletions nextToCall
+          step _ _ _ = error "must have calls left"
 
 
 type Point = (Int, Int)
@@ -168,28 +176,30 @@ type Point = (Int, Int)
 parseDay5 :: String -> [(Point, Point)]
 parseDay5 x = map parseLine (lines x)
     where parseLine :: String -> (Point, Point)
-          parseLine x = case map read (filter ("" /=) (splitOnF (not . isDigit) x)) of a:b:c:d:[] -> ((a, b), (c, d))
+          parseLine x = case map read (filter ("" /=) (splitOnF (not . isDigit) x)) of [a, b, c, d] -> ((a, b), (c, d))
+                                                                                       _ -> error "invalid input"
 
 makeGrid :: Int -> Int -> [[Int]]
 makeGrid width height = replicate height (replicate width 0)
 getMax :: (Point -> Int) -> [(Point, Point)] -> Int
-getMax f = maximum . map f . concat . map (\(a, b) -> [a, b])
+getMax f = maximum . map f . concatMap (\(a, b) -> [a, b])
 
 solveDay5Part1 :: [(Point, Point)] -> Int
-solveDay5Part1 lines = length $ filter (>1) $ concat $ foldl (\x y -> drawLine y x) (makeGrid (1+(getMax fst lines)) (1+(getMax snd lines))) lines
+solveDay5Part1 lines = length $ filter (>1) $ concat $ foldl (flip drawLine) (makeGrid (1+getMax fst lines) (1+getMax snd lines)) lines
     where drawRow :: Int -> Int -> [Int] -> [Int]
           drawRow 0 0 (a:r) = a+1:r
           drawRow 0 x2 (a:r) = a + 1 : drawRow 0 (x2-1) r
           drawRow x1 x2 (a:r) = a : drawRow (x1-1) (x2-1) r
+          drawRow _ _ [] = []
           drawLine :: (Point, Point) -> [[Int]] -> [[Int]]
           drawLine ((x, y1), (x', y2)) grid | x == x' = transpose $ drawLine ((y1, x), (y2, x)) $ transpose grid
-          drawLine ((x1, 0), (x2, 0)) (f:rest) = (drawRow (min x1 x2) (max x1 x2) f) : rest
+          drawLine ((x1, 0), (x2, 0)) (f:rest) = drawRow (min x1 x2) (max x1 x2) f : rest
           drawLine ((x1, y), (x2, y')) (f:rest) | y == y' = f : drawLine ((x1, y-1), (x2, y-1)) rest
           drawLine _ grid = grid
 
 
 solveDay5Part2 :: [(Point, Point)] -> Int
-solveDay5Part2 lines = length $ filter (>1) $ concat $ foldl (\x y -> drawLine y x) (makeGrid (1+(getMax fst lines)) (1+(getMax snd lines))) lines
+solveDay5Part2 lines = length $ filter (>1) $ concat $ foldl (flip drawLine) (makeGrid (1+getMax fst lines) (1+getMax snd lines)) lines
     where drawLine :: (Point, Point) -> [[Int]] -> [[Int]]
           drawLine coords grid = foldl' drawPoint grid (linePoints coords)
 
@@ -205,10 +215,13 @@ solveDay5Part2 lines = length $ filter (>1) $ concat $ foldl (\x y -> drawLine y
 
           linePoints :: (Point, Point) -> [Point]
           linePoints ((x1, y1), (x2, y2)) | x1 == x2 && y1 == y2 = [(x1, y1)]
-          linePoints ((x1, y1), c2@(x2, y2)) = (x1, y1) : (linePoints ((x1 + dir x1 x2, y1 + dir y1 y2), c2))
+          linePoints ((x1, y1), c2@(x2, y2)) = (x1, y1) : linePoints ((x1 + dir x1 x2, y1 + dir y1 y2), c2)
 
 drawGrid :: [[Int]] -> String
 drawGrid = unlines . map (unwords . map show)
+
+parseDay6 :: String -> [Int]
+parseDay6 = map read . splitOn ','
 
 solvePuzzle = show . solveDay5Part2 . parseDay5
 
@@ -216,5 +229,5 @@ main :: IO ()
 main = do
         handle <- openFile "data/day5.txt" ReadMode
         contents <- hGetContents handle
-        putStrLn $ solvePuzzle $ contents
+        putStrLn $ solvePuzzle contents
         hClose handle
