@@ -1,14 +1,9 @@
 module Main where
 
 import System.IO
-import Control.Monad
 import Data.List
-import Data.Bits
-import Debug.Trace
 import Data.Maybe
 import Data.Char
-import Data.Type.Equality (inner)
-import Text.Read (Lexeme(String))
 
 pairwise :: [a] -> [(a, a)]
 pairwise [] = []
