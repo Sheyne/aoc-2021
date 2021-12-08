@@ -251,11 +251,28 @@ solveDay6Part1 = solveDay6Parts 80
 solveDay6Part2 :: [Int] -> Int
 solveDay6Part2 = solveDay6Parts 256
 
-solvePuzzle = show . solveDay6Part2 . parseDay6
+parseDay7 :: String -> [Int]
+parseDay7 = parseDay6
+
+solveDay7Part1 :: [Int] -> Int
+solveDay7Part1 = minimum . costs
+    where costs :: [Int] -> [Int]
+          costs positions = map (`cost` positions) [0..(maximum positions)]
+          cost :: Int -> [Int] -> Int
+          cost target = sum . map (\x -> abs (x - target))
+
+solveDay7Part2 :: [Int] -> Int
+solveDay7Part2 = minimum . costs
+    where costs :: [Int] -> [Int]
+          costs positions = map (`cost` positions) [0..(maximum positions)]
+          cost :: Int -> [Int] -> Int
+          cost target = sum . map (\x -> sum [0..abs (x - target)])
+
+solvePuzzle = show . solveDay7Part2 . parseDay7
 
 main :: IO ()
 main = do
-        handle <- openFile "data/day6.txt" ReadMode
+        handle <- openFile "data/day7.txt" ReadMode
         contents <- hGetContents handle
         putStrLn $ solvePuzzle contents
         hClose handle
