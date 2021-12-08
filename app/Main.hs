@@ -7,6 +7,8 @@ import Data.Bits
 import Debug.Trace
 import Data.Maybe
 import Data.Char
+import Data.Type.Equality (inner)
+import Text.Read (Lexeme(String))
 
 pairwise :: [a] -> [(a, a)]
 pairwise [] = []
@@ -268,11 +270,90 @@ solveDay7Part2 = minimum . costs
           cost :: Int -> [Int] -> Int
           cost target = sum . map (\x -> sum [0..abs (x - target)])
 
-solvePuzzle = show . solveDay7Part2 . parseDay7
+parseDay8 :: String -> [([[Char]], [[Char]])]
+parseDay8 = map (\line -> case map (filter (/= "") . words) $ splitOn '|' line of [a, b] -> (a, b)
+                                                                                  _ -> error "bad line") . lines
+
+solveDay8Part1 :: [([[Char]], [[Char]])] -> Int
+solveDay8Part1 = sum . map inner
+    where inner :: ([[Char]], [[Char]]) -> Int
+          inner (_, output) = length $ filter (`elem` validLengths) $ map length output
+          validLengths = [2, 4, 3, 7]
+
+solveDay8Part2 :: [([[Char]], [[Char]])] -> String
+solveDay8Part2 x = solveMapping (fst (head x)) --sum . map decode
+    where decode :: ([[Char]], [[Char]]) -> Int
+          decode (observed, message) = undefined
+
+          solveMapping :: [[Char]] -> [Char]
+          solveMapping x = let (easies, hards) = splitEasiesFromHards x
+                               fromEasies = foldl' intersectOption unitDigit (map easyToOptions easies)
+                               maps = allMappings fromEasies
+                           in head (filter (isConsistant x) maps)
+
+          anything = "abcdefg"
+          validLengths = [2, 4, 3, 7]
+          unitDigit = [anything, anything, anything, anything, anything, anything, anything]
+          zeroDigit = ["", "", "", "", "", "", ""]
+          splitEasiesFromHards :: [String] -> ([String], [String])
+          splitEasiesFromHards = partition ((`elem` validLengths) . length)
+
+          easyToOptions :: String -> [String]
+          easyToOptions x = makeNumOptions x (easyToDigit (length x))
+
+          easyToDigit :: Int -> Int
+          easyToDigit 2 = 1
+          easyToDigit 3 = 7
+          easyToDigit 4 = 4
+          easyToDigit 7 = 8
+          easyToDigit _ = error "Not an easy one"
+
+          makeNumOptions :: String -> Int -> [String]
+          makeNumOptions x 0 = [x, x, x, anything \\ x, x, x, x] 
+          makeNumOptions x 1 = [anything \\ x, anything \\ x, x, anything \\ x, anything \\ x, x, anything \\ x]
+          makeNumOptions x 2 = [x, anything \\ x, x, x, x, anything \\ x, x]  
+          makeNumOptions x 3 = [x, anything \\ x, x, x, anything \\ x, x, x] 
+          makeNumOptions x 4 = [anything \\ x, x, x, x, anything \\ x, x, anything \\ x] 
+          makeNumOptions x 5 = [x, x, anything \\ x, x, anything \\ x, x, x] 
+          makeNumOptions x 6 = [x, x, anything \\ x, x, x, x, x] 
+          makeNumOptions x 7 = [x, anything \\ x, x, anything \\ x, anything \\ x, x, anything \\ x] 
+          makeNumOptions x 8 = [x, x, x, x, x, x, x]
+          makeNumOptions x 9 = [x, x, x, x, anything \\ x, x, x] 
+          makeNumOptions _ _ = error "not a valid digit"
+
+          fullToDigits :: Int -> [Int]
+          fullToDigits 2 = [1]
+          fullToDigits 3 = [7]
+          fullToDigits 4 = [4]
+          fullToDigits 5 = [2, 3, 5]
+          fullToDigits 6 = [0, 6, 9]
+          fullToDigits 7 = [8]
+          fullToDigits _ = error "Not a valid length"
+
+          optionsForCode :: String -> [String]
+          optionsForCode x = let basePattern = foldl' (\existing digit -> makeNumOptions x digit `unionOption` existing) zeroDigit (fullToDigits (length x))
+                             in map (\cellValues -> if cellValues == "" then anything \\ x else cellValues) basePattern
+
+          intersectOption :: [[Char]] -> [[Char]] -> [[Char]]
+          intersectOption = zipWith intersect
+
+          unionOption :: [[Char]] -> [[Char]] -> [[Char]]
+          unionOption = zipWith union
+
+          isConsistant :: [[Char]] -> [Char] -> Bool
+          isConsistant patterns mapping = all (\pattern -> any (\(optionsForLocation, mappedLocation) -> mappedLocation `elem` optionsForLocation) (zip (optionsForCode pattern) mapping)) patterns
+
+          allMappings :: [String] -> [String]
+          allMappings = inner ""
+              where inner :: String -> [String] -> [String]
+                    inner taken [] = [[]]
+                    inner taken (options:rest) = [x:suffix | x <- options \\ taken, suffix <- inner (x:taken) rest]
+
+solvePuzzle = solveDay8Part2 . parseDay8
 
 main :: IO ()
 main = do
-        handle <- openFile "data/day7.txt" ReadMode
+        handle <- openFile "data/day8.txt" ReadMode
         contents <- hGetContents handle
-        putStrLn $ solvePuzzle contents
+        print $ solvePuzzle contents
         hClose handle
