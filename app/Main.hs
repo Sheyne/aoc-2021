@@ -272,8 +272,8 @@ parseDay8 = map (\line -> case map (filter (/= "") . words) $ splitOn '|' line o
 solveDay8Part1 :: [([[Char]], [[Char]])] -> Int
 solveDay8Part1 = sum . map inner
     where inner :: ([[Char]], [[Char]]) -> Int
-          inner (_, output) = length $ filter (`elem` validLengths) $ map length output
-          validLengths = [2, 4, 3, 7]
+          inner (_, output) = length $ filter (`elem` easyLengths) $ map length output
+          easyLengths = [2, 4, 3, 7]
 
 solveDay8Part2 :: [([[Char]], [[Char]])] -> Int
 solveDay8Part2 = sum . map decode
@@ -288,26 +288,28 @@ solveDay8Part2 = sum . map decode
           getDigit mapping key = snd $ head $ filter (\(k, _) -> sort k == sort key) mapping
 
           solveMapping :: [[Char]] -> [(String, Int)]
-          solveMapping x = let (easies, hards) = splitEasiesFromHards x
-                               fromEasies = foldl' intersectOption unitDigit (map easyToOptions easies)
+          solveMapping x = let fromEasies = foldl' intersectOption unitDigit (map easyToOptions (selectEasies x))
                                maps = allMappings (flip notElem) fromEasies
                            in head $ map fst $ filter (uncurry isConsistant) [(coding, map) | map <- maps, coding <- getAllCodings x]
 
           anything = "abcdefg"
-          validLengths = [2, 4, 3, 7]
+          easyLengths = [2, 4, 3, 7]
           unitDigit = [anything, anything, anything, anything, anything, anything, anything]
-          splitEasiesFromHards :: [String] -> ([String], [String])
-          splitEasiesFromHards = partition ((`elem` validLengths) . length)
+          selectEasies :: [String] -> [String]
+          selectEasies = filter ((`elem` easyLengths) . length)
 
           easyToOptions :: String -> [String]
           easyToOptions x = makeNumOptions x (easyToDigit (length x))
 
+          makeNumOptions :: String -> Int -> [String]
+          makeNumOptions x digit = map (boolToOptions x) (makeNumImage digit)
+              where boolToOptions :: String -> Bool -> String
+                    boolToOptions x True = x
+                    boolToOptions x False = anything \\ x
+
           easyToDigit :: Int -> Int
-          easyToDigit 2 = 1
-          easyToDigit 3 = 7
-          easyToDigit 4 = 4
-          easyToDigit 7 = 8
-          easyToDigit _ = error "Not an easy one"
+          easyToDigit x = case lengthToDigits x of [d] -> d
+                                                   _ -> error "Not an easy one"
 
           makeNumImage :: Int -> [Bool]
           makeNumImage 0 = [True, True, True, False, True, True, True]
@@ -322,29 +324,20 @@ solveDay8Part2 = sum . map decode
           makeNumImage 9 = [True, True, True, True, False, True, True]
           makeNumImage _ = error "not a valid digit"
 
-          makeNumOptions :: String -> Int -> [String]
-          makeNumOptions x digit = map (boolToOptions x) (makeNumImage digit)
-              where boolToOptions :: String -> Bool -> String
-                    boolToOptions x True = x
-                    boolToOptions x False = anything \\ x
-
-          fullToDigits :: Int -> [Int]
-          fullToDigits 2 = [1]
-          fullToDigits 3 = [7]
-          fullToDigits 4 = [4]
-          fullToDigits 5 = [2, 3, 5]
-          fullToDigits 6 = [0, 6, 9]
-          fullToDigits 7 = [8]
-          fullToDigits _ = error "Not a valid length"
+          lengthToDigits :: Int -> [Int]
+          lengthToDigits 2 = [1]
+          lengthToDigits 3 = [7]
+          lengthToDigits 4 = [4]
+          lengthToDigits 5 = [2, 3, 5]
+          lengthToDigits 6 = [0, 6, 9]
+          lengthToDigits 7 = [8]
+          lengthToDigits _ = error "Not a valid length"
 
           getAllCodings :: [String] -> [[(String, Int)]]
-          getAllCodings = allMappings (\x (a, b) -> a `notElem` map fst x && b `notElem` map snd x) . map (\code -> (\digits -> [(code, digit) | digit <- digits]) $ fullToDigits $ length code)
+          getAllCodings = allMappings (\x (a, b) -> a `notElem` map fst x && b `notElem` map snd x) . map (\code -> (\digits -> [(code, digit) | digit <- digits]) $ lengthToDigits $ length code)
 
           intersectOption :: [[Char]] -> [[Char]] -> [[Char]]
           intersectOption = zipWith intersect
-
-          unionOption :: [[Char]] -> [[Char]] -> [[Char]]
-          unionOption = zipWith union
 
           lightUp :: String -> [Char] -> [Bool]
           lightUp signal mapping = map (`elem` signal) mapping
