@@ -280,21 +280,27 @@ solveDay8Part1 = sum . map inner
           inner (_, output) = length $ filter (`elem` validLengths) $ map length output
           validLengths = [2, 4, 3, 7]
 
-solveDay8Part2 :: [([[Char]], [[Char]])] -> String
-solveDay8Part2 x = solveMapping (fst (head x)) --sum . map decode
-    where decode :: ([[Char]], [[Char]]) -> Int
-          decode (observed, message) = undefined
+solveDay8Part2 :: [([[Char]], [[Char]])] -> Int
+solveDay8Part2 = sum . map decode
+    where
+          decode :: ([[Char]], [[Char]]) -> Int
+          decode (observed, message) = let mapping = solveMapping observed
+                                           digits = getDigits mapping message
+                                       in sum $ zipWith (\digit idx -> digit * (10 ^ idx)) (reverse digits) [0..]
+          getDigits :: [(String, Int)] -> [String] -> [Int]
+          getDigits mapping = map (getDigit mapping)
+          getDigit :: [(String, Int)] -> String -> Int
+          getDigit mapping key = snd $ head $ filter (\(k, _) -> sort k == sort key) mapping
 
-          solveMapping :: [[Char]] -> [Char]
+          solveMapping :: [[Char]] -> [(String, Int)]
           solveMapping x = let (easies, hards) = splitEasiesFromHards x
                                fromEasies = foldl' intersectOption unitDigit (map easyToOptions easies)
-                               maps = allMappings fromEasies
-                           in head (filter (isConsistant x) maps)
+                               maps = allMappings (flip notElem) fromEasies
+                           in head $ map fst $ filter (uncurry isConsistant) [(coding, map) | map <- maps, coding <- getAllCodings x]
 
           anything = "abcdefg"
           validLengths = [2, 4, 3, 7]
           unitDigit = [anything, anything, anything, anything, anything, anything, anything]
-          zeroDigit = ["", "", "", "", "", "", ""]
           splitEasiesFromHards :: [String] -> ([String], [String])
           splitEasiesFromHards = partition ((`elem` validLengths) . length)
 
@@ -308,18 +314,24 @@ solveDay8Part2 x = solveMapping (fst (head x)) --sum . map decode
           easyToDigit 7 = 8
           easyToDigit _ = error "Not an easy one"
 
+          makeNumImage :: Int -> [Bool]
+          makeNumImage 0 = [True, True, True, False, True, True, True]
+          makeNumImage 1 = [False, False, True, False, False, True, False]
+          makeNumImage 2 = [True, False, True, True, True, False, True]
+          makeNumImage 3 = [True, False, True, True, False, True, True]
+          makeNumImage 4 = [False, True, True, True, False, True, False]
+          makeNumImage 5 = [True, True, False, True, False, True, True]
+          makeNumImage 6 = [True, True, False, True, True, True, True]
+          makeNumImage 7 = [True, False, True, False, False, True, False]
+          makeNumImage 8 = [True, True, True, True, True, True, True]
+          makeNumImage 9 = [True, True, True, True, False, True, True]
+          makeNumImage _ = error "not a valid digit"
+
           makeNumOptions :: String -> Int -> [String]
-          makeNumOptions x 0 = [x, x, x, anything \\ x, x, x, x] 
-          makeNumOptions x 1 = [anything \\ x, anything \\ x, x, anything \\ x, anything \\ x, x, anything \\ x]
-          makeNumOptions x 2 = [x, anything \\ x, x, x, x, anything \\ x, x]  
-          makeNumOptions x 3 = [x, anything \\ x, x, x, anything \\ x, x, x] 
-          makeNumOptions x 4 = [anything \\ x, x, x, x, anything \\ x, x, anything \\ x] 
-          makeNumOptions x 5 = [x, x, anything \\ x, x, anything \\ x, x, x] 
-          makeNumOptions x 6 = [x, x, anything \\ x, x, x, x, x] 
-          makeNumOptions x 7 = [x, anything \\ x, x, anything \\ x, anything \\ x, x, anything \\ x] 
-          makeNumOptions x 8 = [x, x, x, x, x, x, x]
-          makeNumOptions x 9 = [x, x, x, x, anything \\ x, x, x] 
-          makeNumOptions _ _ = error "not a valid digit"
+          makeNumOptions x digit = map (boolToOptions x) (makeNumImage digit)
+              where boolToOptions :: String -> Bool -> String
+                    boolToOptions x True = x
+                    boolToOptions x False = anything \\ x
 
           fullToDigits :: Int -> [Int]
           fullToDigits 2 = [1]
@@ -330,9 +342,8 @@ solveDay8Part2 x = solveMapping (fst (head x)) --sum . map decode
           fullToDigits 7 = [8]
           fullToDigits _ = error "Not a valid length"
 
-          optionsForCode :: String -> [String]
-          optionsForCode x = let basePattern = foldl' (\existing digit -> makeNumOptions x digit `unionOption` existing) zeroDigit (fullToDigits (length x))
-                             in map (\cellValues -> if cellValues == "" then anything \\ x else cellValues) basePattern
+          getAllCodings :: [String] -> [[(String, Int)]]
+          getAllCodings = allMappings (\x (a, b) -> a `notElem` map fst x && b `notElem` map snd x) . map (\code -> (\digits -> [(code, digit) | digit <- digits]) $ fullToDigits $ length code)
 
           intersectOption :: [[Char]] -> [[Char]] -> [[Char]]
           intersectOption = zipWith intersect
@@ -340,14 +351,19 @@ solveDay8Part2 x = solveMapping (fst (head x)) --sum . map decode
           unionOption :: [[Char]] -> [[Char]] -> [[Char]]
           unionOption = zipWith union
 
-          isConsistant :: [[Char]] -> [Char] -> Bool
-          isConsistant patterns mapping = all (\pattern -> any (\(optionsForLocation, mappedLocation) -> mappedLocation `elem` optionsForLocation) (zip (optionsForCode pattern) mapping)) patterns
+          lightUp :: String -> [Char] -> [Bool]
+          lightUp signal mapping = map (`elem` signal) mapping
 
-          allMappings :: [String] -> [String]
-          allMappings = inner ""
-              where inner :: String -> [String] -> [String]
-                    inner taken [] = [[]]
-                    inner taken (options:rest) = [x:suffix | x <- options \\ taken, suffix <- inner (x:taken) rest]
+          isConsistant :: [(String, Int)] -> [Char] -> Bool
+          isConsistant patterns mapping = all (testPattern mapping) patterns
+              where testPattern :: [Char] -> (String, Int) -> Bool
+                    testPattern mapping (key, digit) = lightUp key mapping == makeNumImage digit 
+
+          allMappings :: ([a] -> a -> Bool) -> [[a]] -> [[a]]
+          allMappings = inner []
+              where inner :: [a] -> ([a] -> a -> Bool) -> [[a]] -> [[a]]
+                    inner _ _ [] = [[]]
+                    inner taken selector (options:rest) = [x:suffix | x <- filter (selector taken) options, suffix <- inner (x:taken) selector rest]
 
 solvePuzzle = solveDay8Part2 . parseDay8
 
