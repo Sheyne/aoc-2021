@@ -6,6 +6,7 @@ import Data.List
 import Data.Bits
 import Debug.Trace
 import Data.Maybe
+import Data.Char
 
 pairwise :: [a] -> [(a, a)]
 pairwise (x:rest) = zip (x:rest) rest
@@ -112,9 +113,12 @@ solveDay3Part2 nums = let
 data Board = Board { draws :: [Int], boards :: [[[Int]]] } deriving Show
 
 splitOn :: Eq a => a -> [a] -> [[a]]
-splitOn _ [] = []
-splitOn a s = case break (a ==) s of (x, []) -> [x]
-                                     (x, _:rest) -> x : (splitOn a rest)
+splitOn a = splitOnF (a ==)
+
+splitOnF :: (a -> Bool) -> [a] -> [[a]]
+splitOnF _ [] = []
+splitOnF f s = case break f s of (x, []) -> [x]
+                                 (x, _:rest) -> x : (splitOnF f rest)
 
 parseDay4 :: String -> Board
 parseDay4 x = let
@@ -159,11 +163,37 @@ solveDay4Part2 b = step (boards b) (replicate (length (boards b)) False) (prefix
                                                         else step boards boardCompletions nextToCall
 
 
-solvePuzzle = solveDay4Part2 . parseDay4
+type Point = (Int, Int)
+
+parseDay5 :: String -> [(Point, Point)]
+parseDay5 x = map parseLine (lines x)
+    where parseLine :: String -> (Point, Point)
+          parseLine x = case map read (filter ("" /=) (splitOnF (not . isDigit) x)) of a:b:c:d:[] -> ((a, b), (c, d))
+
+solveDay5Part1 :: [(Point, Point)] -> Int
+solveDay5Part1 lines = length $ filter (>1) $ concat $ foldl (\x y -> drawLine y x) (makeGrid (1+(getMax fst lines)) (1+(getMax snd lines))) lines
+    where makeGrid :: Int -> Int -> [[Int]]
+          makeGrid width height = replicate height (replicate width 0)
+          getMax :: (Point -> Int) -> [(Point, Point)] -> Int
+          getMax f = maximum . map f . concat . map (\(a, b) -> [a, b])
+          drawRow :: Int -> Int -> [Int] -> [Int]
+          drawRow 0 0 (a:r) = a+1:r
+          drawRow 0 x2 (a:r) = a + 1 : drawRow 0 (x2-1) r
+          drawRow x1 x2 (a:r) = a : drawRow (x1-1) (x2-1) r
+          drawLine :: (Point, Point) -> [[Int]] -> [[Int]]
+          drawLine ((x, y1), (x', y2)) grid | x == x' = transpose $ drawLine ((y1, x), (y2, x)) $ transpose grid
+          drawLine ((x1, 0), (x2, 0)) (f:rest) = (drawRow (min x1 x2) (max x1 x2) f) : rest
+          drawLine ((x1, y), (x2, y')) (f:rest) | y == y' = f : drawLine ((x1, y-1), (x2, y-1)) rest
+          drawLine _ grid = grid
+
+drawGrid :: [[Int]] -> String
+drawGrid = unlines . map (unwords . map show)
+
+solvePuzzle = show . solveDay5Part1 . parseDay5
 
 main :: IO ()
 main = do
-        handle <- openFile "data/day4.txt" ReadMode
+        handle <- openFile "data/day5.txt" ReadMode
         contents <- hGetContents handle
-        putStrLn $ show . solvePuzzle $ contents
+        putStrLn $ solvePuzzle $ contents
         hClose handle
