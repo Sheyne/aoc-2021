@@ -4,6 +4,10 @@ import System.IO
 import Data.List
 import Data.Maybe
 import Data.Char
+import Control.Monad
+import Text.ParserCombinators.ReadP (count)
+import Control.Arrow
+import Debug.Trace
 
 pairwise :: [a] -> [(a, a)]
 pairwise [] = []
@@ -345,7 +349,7 @@ solveDay8Part2 = sum . map decode
           isConsistant :: [(String, Int)] -> [Char] -> Bool
           isConsistant patterns mapping = all (testPattern mapping) patterns
               where testPattern :: [Char] -> (String, Int) -> Bool
-                    testPattern mapping (key, digit) = lightUp key mapping == makeNumImage digit 
+                    testPattern mapping (key, digit) = lightUp key mapping == makeNumImage digit
 
           allMappings :: ([a] -> a -> Bool) -> [[a]] -> [[a]]
           allMappings = inner []
@@ -353,11 +357,135 @@ solveDay8Part2 = sum . map decode
                     inner _ _ [] = [[]]
                     inner taken selector (options:rest) = [x:suffix | x <- filter (selector taken) options, suffix <- inner (x:taken) selector rest]
 
-solvePuzzle = solveDay8Part2 . parseDay8
+parseDay9 :: String -> [[Int]]
+parseDay9 = map (map digitToInt) . lines
+
+elementWise :: (a->b->c) -> [[a]] -> [[b]] -> [[c]]
+elementWise f = zipWith (zipWith f)
+
+convolveSame :: (Maybe a -> a -> Maybe a -> b) -> [a] -> [b]
+convolveSame f xs = zipWith3 f (Nothing : map Just xs) xs (map Just (tail xs) ++ [Nothing])
+
+solveDay9Part1 :: [[Int]] -> Int
+solveDay9Part1 x = sum $ map ((+1) . snd) $ filter fst $ concat $ elementWise (,) (findLocalMinsSquare x) x
+    where findLocalMins :: (Ord a) => [a] -> [Bool]
+          findLocalMins = map (\(l, c, r) -> c < l && c < r) . triplewise
+
+          findLocalMinsWithEnds :: (Ord a, Bounded a) => [a] -> [Bool]
+          findLocalMinsWithEnds x = findLocalMins (maxBound : x ++ [maxBound])
+
+          findLocalMinsSquare :: (Ord a, Bounded a) => [[a]] -> [[Bool]]
+          findLocalMinsSquare x = elementWise (&&) (map findLocalMinsWithEnds x) (transpose (map findLocalMinsWithEnds (transpose x)))
+
+chunksOf :: Int -> [a] -> [[a]]
+chunksOf _ [] = []
+chunksOf count list = take count list : chunksOf count (drop count list)
+
+countOccurances :: (Eq a) => [a] -> [(Int, a)]
+countOccurances [] = []
+countOccurances (x:rest) = increment x (countOccurances rest)
+    where increment :: (Eq a) => a -> [(Int, a)] -> [(Int, a)]
+          increment x [] = [(1, x)]
+          increment x ((n, y):rest) | x == y = (n+1, x) : rest
+          increment x (fst:rest) = fst : increment x rest
+
+converge :: (Eq a) => (a -> a) -> a -> a
+converge f x = if f x == x then x else converge f (f x)
+
+solveDay9Part2 :: [[Int]] -> Int
+solveDay9Part2 = map (map (/= 9))
+                 >>> findConnectedComponents
+                 >>> concat
+                 >>> catMaybes
+                 >>> countOccurances
+                 >>> map fst
+                 >>> sort
+                 >>> reverse
+                 >>> take 3
+                 >>> product
+    where findConnectedComponents :: [[Bool]] -> [[Maybe Int]]
+          findConnectedComponents x = let seed = elementWise (\b c -> if b then Just c else Nothing) x (initialColoring (length (head x)) (length x))
+                                      in converge combineNeighbors1 seed
+
+          combineNeighbors1H :: (Ord a) => [Maybe a] -> [Maybe a]
+          combineNeighbors1H = convolveSame merge'
+              where merge' :: (Ord a) => Maybe (Maybe a) -> Maybe a -> Maybe (Maybe a) -> Maybe a
+                    merge' a b c = merge (join a) b (join c)
+                    merge :: (Ord a) => Maybe a -> Maybe a -> Maybe a -> Maybe a
+                    merge (Just l) (Just m) (Just r) = Just $ min l $ min m r
+                    merge Nothing (Just m) (Just r) = Just $ min m r
+                    merge (Just l) (Just m) Nothing = Just $ min l m
+                    merge _ x _ = x
+
+          combineNeighbors1 :: [[Maybe Int]] -> [[Maybe Int]]
+          combineNeighbors1 = transpose . map (converge combineNeighbors1H) . transpose . map (converge combineNeighbors1H)
+
+          initialColoring :: Int -> Int -> [[Int]]
+          initialColoring width height = chunksOf width [1..(width * height)]
+
+
+parseDay10 :: String -> [String]
+parseDay10 = lines
+
+isOpening :: Char -> Bool
+isOpening '(' = True
+isOpening '{' = True
+isOpening '[' = True
+isOpening '<' = True
+isOpening _ = False
+
+matching :: Char -> Char
+matching '(' = ')'
+matching '{' = '}'
+matching '<' = '>'
+matching '[' = ']'
+matching x = error ("Not a valid opening: '" ++ (x : "'"))
+
+solveDay10Part1 :: [String] -> Int
+solveDay10Part1 = sum . map scoreLine
+    where scoreLine :: String -> Int
+          scoreLine x = case parseLine x of Right _ -> 0
+                                            Left ')' -> 3
+                                            Left ']' -> 57
+                                            Left '}' -> 1197
+                                            Left '>' -> 25137
+                                            Left _ -> error "invalid close"
+
+          findClosing :: Char -> String -> Either Char String
+          findClosing opener (x : whatever) | isOpening x = case parseLine (x:whatever) of Left x -> Left x
+                                                                                           Right x -> findClosing opener x
+          findClosing opener (x : whatever) | matching opener == x = Right whatever
+          findClosing opener (x : whatever) = Left x
+          findClosing opener [] = Right []
+
+          parseLine :: String -> Either Char String
+          parseLine [] = Right ""
+          parseLine (opener : rest) | isOpening opener = findClosing opener rest
+          parseLine _ = error "invalid line"
+
+solveDay10Part2 :: [String] -> Int
+solveDay10Part2 x = let scores = sort (filter (/=0) (map scoreLine x))
+                    in scores !! (length scores `div` 2)
+    where scoreLine :: String -> Int
+          scoreLine = foldl (\acc x -> acc * 5 + points x) 0 . parseLine ""
+
+          points ')' = 1
+          points ']' = 2
+          points '}' = 3
+          points '>' = 4
+          points _ = error "no points!"
+
+          parseLine :: String -> String -> String
+          parseLine stack (next:rest) | isOpening next = parseLine (next:stack) rest
+          parseLine (top:stack) (next:rest) | matching top == next = parseLine stack rest
+          parseLine stack "" = map matching stack
+          parseLine _ _ = ""
+
+solvePuzzle = solveDay10Part2 . parseDay10
 
 main :: IO ()
 main = do
-        handle <- openFile "data/day8.txt" ReadMode
+        handle <- openFile "data/day10.txt" ReadMode
         contents <- hGetContents handle
         print $ solvePuzzle contents
         hClose handle
