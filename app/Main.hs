@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Main where
 
 import System.IO
@@ -8,6 +9,12 @@ import Control.Monad
 import Text.ParserCombinators.ReadP (count)
 import Control.Arrow
 import Debug.Trace
+import Control.Monad.ST
+import Control.Monad.Loops
+import Data.Array.ST
+import Data.Array.IArray
+import Data.STRef
+import Data.IORef (modifyIORef)
 
 pairwise :: [a] -> [(a, a)]
 pairwise [] = []
@@ -481,11 +488,80 @@ solveDay10Part2 x = let scores = sort (filter (/=0) (map scoreLine x))
           parseLine stack "" = map matching stack
           parseLine _ _ = ""
 
-solvePuzzle = solveDay10Part2 . parseDay10
+parseDay11 :: String -> [[Int]]
+parseDay11 = parseDay9
+
+indexed :: [a] -> [(Int, a)]
+indexed = helper 0
+    where helper :: Int -> [a] -> [(Int, a)]
+          helper idx [] = []
+          helper idx (a:rest) = (idx, a) : helper (idx + 1) rest
+
+indexed2d :: [[a]] -> [((Int, Int), a)]
+indexed2d = concatMap (\(r, row) -> map (\(c, e) -> ((r, c), e)) $ indexed row) . indexed
+
+arrayFrom2dList :: [[a]] -> Array (Int, Int) a
+arrayFrom2dList x = array ((0, 0), (length x - 1, length (head x) - 1)) (indexed2d x)
+
+incrNeighbors :: STArray s (Int, Int) (Maybe Int) -> Int -> Int -> (Int, Int) -> ST s ()
+incrNeighbors x height width y = do
+    writeArray x y Nothing
+    mapM_ (\loc -> do
+        oldVal <- readArray x loc
+        let newVal = fmap (+1) oldVal
+        writeArray x loc newVal) (neighbors height width y)
+
+neighbors :: Int -> Int -> (Int, Int) -> [(Int, Int)]
+neighbors h w (y, x) = [(ny, nx) | ny <- [(max 0 (y-1))..(min h (y+1))], nx <- [(max 0 (x-1))..(min w (x+1))]]
+
+modifyAll :: STArray s (Int, Int) a -> (a -> a) -> ST s ()
+modifyAll a f = do
+    assocs <- getAssocs a
+    mapM_ (\(loc, x) -> writeArray a loc $ f x) assocs
+
+
+solveDay11Part1 :: [[Int]] -> Int
+solveDay11Part1 x = runST $ do
+    numBursts <- newSTRef 0
+    arr <- thaw $ arrayFrom2dList (map (map Just) x) :: ST s (STArray s (Int, Int) (Maybe Int))
+    ((_, _), (height, width)) <- getBounds arr
+
+    mapM_ (\_ -> do
+            modifyAll arr (fmap (+1))
+            whileJust_ (listToMaybe . map fst . filter (\x -> case snd x of Just x -> x >= 10
+                                                                            Nothing -> False)
+                                                                            <$> getAssocs arr)
+                (\x -> do incrNeighbors arr height width x
+                          modifySTRef numBursts (+1))
+            modifyAll arr (\case Just x -> Just x ; Nothing -> Just 0)
+        ) [1..100]
+
+    readSTRef numBursts
+
+solveDay11Part2 :: [[Int]] -> Int
+solveDay11Part2 x = runST $ do
+    arr <- thaw $ arrayFrom2dList (map (map Just) x) :: ST s (STArray s (Int, Int) (Maybe Int))
+    ((_, _), (height, width)) <- getBounds arr
+    iteration <- newSTRef 0
+
+    untilJust $ do
+        modifyAll arr (fmap (+1))
+        whileJust_ (listToMaybe . map fst . filter (\x -> case snd x of Just x -> x >= 10
+                                                                        Nothing -> False)
+                                                                        <$> getAssocs arr)
+            (incrNeighbors arr height width)
+        modifySTRef iteration (+1)
+        i <- readSTRef iteration
+        currentArray <- getElems arr
+        let result = if all (== Nothing) currentArray then Just i else Nothing
+        modifyAll arr (\case Just x -> Just x ; Nothing -> Just 0)
+        pure result
+
+solvePuzzle = solveDay11Part2 . parseDay11
 
 main :: IO ()
 main = do
-        handle <- openFile "data/day10.txt" ReadMode
+        handle <- openFile "data/day11.txt" ReadMode
         contents <- hGetContents handle
         print $ solvePuzzle contents
         hClose handle
