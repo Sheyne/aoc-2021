@@ -15,6 +15,8 @@ import Data.Array.ST
 import Data.Array.IArray
 import Data.STRef
 import Data.IORef (modifyIORef)
+import qualified Data.Heap as H
+import qualified Data.Map as Map
 
 pairwise :: [a] -> [(a, a)]
 pairwise [] = []
@@ -690,11 +692,49 @@ solveDay14Part2 (initial, mappings) = let
                   newLetterCounts = joinCounts (letterCounts ++ concatMap snd newCounts)
               in (newLetterCounts, newPairCounts)
 
-solvePuzzle = solveDay14Part2 . parseDay14
+parseDay15 :: String -> [[Int]]
+parseDay15 = parseDay9
+
+astar :: (Eq l, Ord l, Show l) => (l -> [(Int, l)]) -> (l -> Int) -> l -> Int
+astar neighbors heuristic startingLoc = astar' neighbors heuristic (Map.insert startingLoc 0 Map.empty) (H.insert (heuristic startingLoc, startingLoc) H.empty)
+    where astar' :: (Eq l, Ord l, Show l) => (l -> [(Int, l)]) -> (l -> Int) -> Map.Map l Int -> H.MinPrioHeap Int l -> Int
+          astar' neighbors heuristic bestKnown paths = let
+                  ((_, loc), otherPaths) = fromJust $ H.view paths
+                  score = fromJust $ Map.lookup loc bestKnown
+                  neighborhood = filter (\(c, l) -> maybe True (>(c + score)) (Map.lookup l bestKnown)) $ neighbors loc
+                  newPaths = map (\(cost, dest) -> (cost + score, dest)) neighborhood
+                  newPathsH = (H.fromList $ map (\(c, p) -> (c + heuristic p, p)) newPaths)
+              in
+                  if heuristic loc == 0 then score else
+                  astar' neighbors heuristic (foldr (\(v, k) bn -> Map.insert k v bn) bestKnown newPaths) (H.union newPathsH otherPaths)
+
+solveDay15Part1 :: [[Int]] -> Int
+solveDay15Part1 board =
+    let arrayBoard = arrayFrom2dList board
+        ((_, _), (height, width)) = bounds arrayBoard
+        lookup = (arrayBoard !)
+    in astar (neighbors lookup width height) (heuristic width height) (0, 0)
+    where neighbors :: ((Int, Int)->Int) -> Int -> Int -> (Int, Int) -> [(Int, (Int, Int))]
+          neighbors lookup width height (x, y) = map (\l -> (lookup l, l)) $
+                filter (validBoardLoc width height) [(x+1, y), (x-1, y), (x, y-1), (x, y+1)]
+
+          validBoardLoc :: Int -> Int -> (Int, Int) -> Bool
+          validBoardLoc width height (x, y) = x >= 0 && x <= width && y >= 0 && y <= height
+
+          heuristic :: Int -> Int -> (Int, Int) -> Int
+          heuristic width height (x, y) = width - x + height - y
+
+solveDay15Part2 :: [[Int]] -> Int
+solveDay15Part2 = solveDay15Part1 . expand
+    where expand :: [[Int]] -> [[Int]]
+          expand grid = concat [map (\row -> concat [map (\c -> ((c + x + y - 1) `rem` 9) + 1) row | x <- [0..4]]) grid
+                                | y <- [0..4]]
+
+solvePuzzle = solveDay15Part2 . parseDay15
 
 main :: IO ()
 main = do
-        handle <- openFile "data/day14.txt" ReadMode
+        handle <- openFile "data/day15.txt" ReadMode
         contents <- hGetContents handle
         print $ solvePuzzle contents
         hClose handle
