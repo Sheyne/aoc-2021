@@ -863,11 +863,26 @@ solveDay17Part2 (xs, ys) = let
           trajectory x y _ _ xmax ymax | abs x > abs xmax || signum ymax * y > signum ymax * ymax = []
           trajectory x y vx vy xmax ymax = (x, y) : trajectory (x+vx) (y+vy) (vx - signum vx) (vy-1) xmax ymax
 
-solvePuzzle = solveDay17Part2 . parseDay17
+data SnailfishNumber = Leaf Int | Pair SnailfishNumber SnailfishNumber deriving Show
+
+parseSnailfishNumber :: String -> (String, SnailfishNumber)
+parseSnailfishNumber ('[' : rest) = let
+    (',': rest', a) = parseSnailfishNumber rest 
+    (']': rest'', b) = parseSnailfishNumber rest'
+    in (rest'', Pair a b)
+parseSnailfishNumber x = readInt "" x
+    where readInt :: String -> String -> (String, SnailfishNumber)
+          readInt accum (x:rest) | isDigit x = readInt (accum ++ [x]) rest
+          readInt accum x = (x, Leaf $ read accum)
+
+parseDay18 :: String -> [SnailfishNumber]
+parseDay18 = map (snd . parseSnailfishNumber) . lines
+
+solvePuzzle = parseDay18
 
 main :: IO ()
 main = do
-        handle <- openFile "data/day17.txt" ReadMode
+        handle <- openFile "data/day18.txt" ReadMode
         contents <- hGetContents handle
         print $ solvePuzzle contents
         hClose handle
