@@ -20,7 +20,6 @@ import Day15
 import Day16
 import Day17
 import Day18
-import Helpers
 
 solvePuzzle = solveDay18Part2 . parseDay18
 
