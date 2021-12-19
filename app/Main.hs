@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
 module Main where
 
 import System.IO
